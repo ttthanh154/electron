@@ -5,13 +5,21 @@ html, body {
 	width: 100%;
 	height: 100%;
 }
-
 body {
 	color: var(--secondary);
 	box-sizing: border-box;
 	font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen-Sans, Ubuntu, Cantarell, "Helvetica Neue", sans-serif;
 }
-
+table {
+	width: 100%;
+	border-collapse: collapse;
+}
+td, td {
+	padding: 8px 16px;
+}
+th { 
+	background:#eee; 
+}
 
 input:hover {
 	border: 1px solid var(--border-200);
@@ -49,4 +57,10 @@ input::file-selector-button {
 /* Style the label text */
 label span {
     display: block;
+}
+
+td {
+	/* display: flex; */
+	align-items: center;
+	text-align: center;
 }

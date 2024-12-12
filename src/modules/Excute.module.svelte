@@ -1,98 +1,144 @@
 <script>
-    import { onMount } from 'svelte';
     import Button from '../common/components/button.svelte';
-    import { runScript, writeToFile } from '../services/command.service.js';
+    import { getVideoDirectory, writeToFile } from '../services/command.service.js';
     import Input from "../common/components/input.svelte";
     import Textarea from "../common/components/textarea.svelte";
+    import { DirectoryEnum } from '../enums/DirectoryEnum.svelte';
 
     let videoDirectory;
-    let speedFactor;
-    let zoomFactor;
-    let preset;
-    let firstOutputDirectory;
-    let secondOutputDirectory;
+    let speedFactor = 1;
+    let zoomFactor = 1;
+    let preset = 'fast';
+    let outputDirectory;
+    let inputFiles;
     let concatValue;
-    let scriptContent = '';
+    let scriptContent;  
+        
+    const handleWriteToFile = async () => {
+        for (const script of dataSource) {
+            console.log('script:::', script.episodes);
+            const episodeFiles = gatherEpisodes(script.episodes);
+            console.log('script.episodes:::', episodeFiles);
 
-    $: videoDirectory = `G:\\Shared drives\\GTA_NOI BO\\Video Hoan Thien`;
-    $: speedFactor = 1;
-    $: zoomFactor = 1;
-    $: preset = 'fast';
-    $: firstOutputDirectory = `D:\\thu_7`;
-    $: secondOutputDirectory = `D:\\chu_nhat`
-    $: scriptContent = `
-        @echo off
+            videoDirectory = script.input;
+            outputDirectory = script.output;
+            concatValue = episodeFiles.length;
+            inputFiles = generateInputFilesString(episodeFiles)
+
+            console.log('videoFiles:::', inputFiles);
+            if (videoDirectory !== undefined && outputDirectory !== undefined) {
+                scriptContent = generateScriptContent(videoDirectory, outputDirectory, preset, inputFiles, episodeFiles[0]);
+                console.log('content', scriptContent);
+            }
+
+            await writeToFile(scriptContent);
+
+        }
+        // return data;
+    };
+
+    /**
+     * 
+     * @param typeDirectory number
+     * @param index number
+     */
+    let handleGetVideoDirectory = async (typeDirectory, index)  => {
+        const data  = await getVideoDirectory();
+        typeDirectory === DirectoryEnum.INPUT ? dataSource[index].input = data : dataSource[index].output = data;
+    };
+
+    /**
+     * 
+     * @param videos string[]
+     */
+    const generateInputFilesString = (videos) => {
+        const inputFiles = videos.map(video => `-i "!video_directory!\\${video}"`).join(' ');
+
+        return `"input_files=${inputFiles}"`;
+    };
+    
+    /**
+     * 
+     * @param data string[]
+     */
+    const gatherEpisodes = (episode) => {
+        // Regular expression to match file name patterns (assuming file names are alphanumeric with underscores)
+        const fileNameRegex = /\b\w+(?:_\w+)*\b/g;
+            
+        const fileNames = episode.match(fileNameRegex);        
+        // Add '.mp4' to each filename
+        const fileNamesWithExtension = fileNames.map(fileName => fileName + '.mp4');
+            
+        return fileNamesWithExtension || [];
+    }
+
+    const generateScriptContent = (videoDirectory, outputDirectory, preset, inputFiles, outputFile) => {
+        return `@echo off
         setlocal enabledelayedexpansion
-
+            
         REM Define main variables
         set "video_directory=${videoDirectory}"
-
+            
         REM Processing parameters
         set "speed_factor=${speedFactor}"          REM ${speedFactor * 100}% speed-up
         set "zoom_factor=${zoomFactor}"            REM ${(zoomFactor - 1) * 100}% zoom-in
         set "output_width=1920"                    REM Output width after cropping
-        set "output_height=1080                    REM Output height after cropping
-        set "video_bitrate=15M"         REM Target average bitrate
-        set "max_bitrate=15M"           REM Maximum bitrate
-        set "bufsize=20M"               REM Buffer size
-        set "nvenc_preset=${preset}"    REM Fast NVENC preset
-        set "nvenc_profile=main"        REM H.264 profile
-        set "nvenc_rc=cbr"              REM Constant bitrate mode
-
-        REM Define days and their video lists
-        for %%D in (thu_7 chu_nhat) do (
-            if %%D==thu_7 (
-                REM First list for thu_7
-                set "output_directory=${firstOutputDirectory}"
-                set "output_file=!output_directory!\\GTA_658.mp4"
-                set "input_files=-i "!video_directory!\\Bhive_GTA_658.mp4" -i "!video_directory!\\Bhive_GTA_670.mp4" -i "!video_directory!\\Bhive_GTA_655.mp4" -i "!video_directory!\\Bhive_GTA_692.mp4""
-                set "concat_value=${concatValue}"
-                call :process_videos
-
-            ) else if %%D==chu_nhat (
-                REM First list for chu_nhat
-                set "output_directory=${secondOutputDirectory}"
-                set "output_file=!output_directory!\\GTA_718.mp4"
-                set "input_files=-i "!video_directory!\\Bhive_GTA_718.mp4" -i "!video_directory!\\Bhive_GTA_723.mp4" -i "!video_directory!\\Bhive_GTA_725.mp4" -i "!video_directory!\\Bhive_GTA_712.mp4""
-                set "concat_value=${concatValue}"
-                call :process_videos
-            )
+        set "output_height=1080"                   REM Output height after cropping
+        set "video_bitrate=15M"                    REM Target average bitrate
+        set "max_bitrate=15M"                      REM Maximum bitrate
+        set "bufsize=20M"                          REM Buffer size
+        set "nvenc_preset=${preset}"               REM Fast NVENC preset
+        set "nvenc_profile=main"                   REM H.264 profile
+        set "nvenc_rc=cbr"                         REM Constant bitrate mode
+            
+        set "output_directory=${outputDirectory}"
+        set "output_file=!output_directory!\\${outputFile}"
+        set ${inputFiles}
+        set "concat_value=${concatValue}"
+        call :process_videos
+            
+        REM Check if FFmpeg is installed
+        where ffmpeg >nul 2>&1
+        if errorlevel 1 (
+            echo "FFmpeg is not installed or not in the system PATH. Exiting."
+            exit /b
         )
 
-        REM Function to process videos
+        REM Call processing function
+        call :process_videos
+
+        REM Exit script
+        goto :eof
+
         :process_videos
-            REM Create output directory if it doesn't exist
-            if not exist "!output_directory!" mkdir "!output_directory!"
+        REM Create output directory if it doesn't exist
+        if not exist "!output_directory!" mkdir "!output_directory!"
 
-            REM Apply filters and encoding for each day's files with scaling
-            ffmpeg -y -threads 8 !input_files! -filter_complex "[0:v][0:a][1:v][1:a][2:v][2:a][3:v][3:a]concat=n=!concat_value!:v=1:a=1[v][a];[v]scale=w=iw*!zoom_factor!:h=ih*!zoom_factor!,crop=w=!output_width!:h=!output_height!:x=(iw-!output_width!)/2:y=(ih-!output_height!)/2,setpts=PTS/!speed_factor!,fps=30[vout];[a]atempo=!speed_factor!,aresample=async=1[aout]" -map "[vout]" -map "[aout]" -c:v h264_nvenc -preset !nvenc_preset! -profile:v !nvenc_profile! -rc cbr -b:v !video_bitrate! -maxrate !max_bitrate! -bufsize !bufsize! -g 30 -pix_fmt yuv420p -tune ll -flags +low_delay -movflags +faststart -c:a aac -b:a 192k "!output_file!"
+        REM Apply filters and encoding
+        ffmpeg -y -threads 8 !input_files! -filter_complex "[0:v][0:a][1:v][1:a]concat=n=!concat_value!:v=1:a=1[v][a];[v]scale=w=iw*!zoom_factor!:h=ih*!zoom_factor!,crop=w=!output_width!:h=!output_height!:x=(iw-!output_width!)/2:y=(ih-!output_height!)/2,setpts=PTS/!speed_factor!,fps=30[vout];[a]atempo=!speed_factor!,aresample=async=1[aout]" -map "[vout]" -map "[aout]" -c:v h264_nvenc -preset !nvenc_preset! -profile:v !nvenc_profile! -rc cbr -b:v !video_bitrate! -maxrate !max_bitrate! -bufsize !bufsize! -g 30 -pix_fmt yuv420p -tune ll -flags +low_delay -movflags +faststart -c:a aac -b:a 192k "!output_file!"
 
-            echo "Processing for %%D completed. Output saved at: !output_file!"
-            goto :eof
-    `;
+        if errorlevel 1 (
+            echo "Error during processing. See FFmpeg output for details."
+        ) else (
+            echo "Processing completed. Output saved at: !output_file!"
+        )
+        goto :eof`;
+    } 
 
-    let handleWriteToFile;
-
-    let data = [{
+    let dataSource = [{
         input: '',
         output: '',
-        episode: ''
+        episodes: ''
     }];
 
-    function addRows() {
-        data = [...data, { input: '', output: '', episode: '' }]; // Add a new row with default values
+    const addRows = () => {
+        dataSource = [...dataSource, { input: '', output: '', episodes: '' }]; // Add a new row with default values
     }
-
-    // Life cycles
-    onMount(() => {
-        handleWriteToFile = writeToFile; // Assign the function to handleWriteToFile
-        // handleWriteToFile = runScript; // Assign the function to runScript
-    })
 </script>
 
 <main>
-    <div>
-        <table class="table">
+    <div class="table-wrapper">
+        <table>
             <thead>
                 <tr>
                     <th>Vị trí Input</th>
@@ -101,20 +147,27 @@
                 </tr>
             </thead>
             <tbody>
-                {#each data as item, i}
+                {#each dataSource as item, i}
                     <tr>
-                        <td><Input label='Input' id='input' type='file' bind:value={item.input} webkitdirectory/></td>
-                        <td><Input label='Output'id='output' type='file' bind:value={item.output} webkitdirectory/></td>
+                        <td align="center"> 
+                            <Button on:click={() => handleGetVideoDirectory(DirectoryEnum.INPUT, i)} class='btn main-btn'>Select</Button>
+                            <Input label='Input' id={'input-' + 1} bind:value={item.input}/>
+                        </td>
+                        <td align="center">
+                            <Button on:click={() => handleGetVideoDirectory(DirectoryEnum.OUTPUT, i)} class='btn main-btn'>Select</Button>
+                            <Input label='Output' id={'output' + 1} bind:value={item.output}/></td>
                         <!-- <td><Input type='number' bind:value={item.recordings} /></td> -->
-                        <td><Textarea placeholder='Enter episodes...' rows='4' cols='50' bind:value={item.episode} /></td>
+                        <td><Textarea placeholder='Enter episodes...' rows='4' cols='60' bind:value={item.episodes} /></td>
                     </tr>
                 {/each}
             </tbody>
         </table>
-        <Button class='btn main-btn w-6' on:click={addRows}>Add row</Button>
     </div>
 
-    <div class="d-flex flex-container w-auto">
+    <div class="d-flex flex-container">
+        <div>
+            <Button class='btn main-btn w-6' on:click={addRows}>Add row</Button>
+        </div>
         <div>
             <Input label='Speed-up' id='speedFactor' class="input" type="number" bind:value={speedFactor} step="0.1" min="1" max="2" />
         </div>
@@ -122,8 +175,7 @@
             <Input label='Zoom-in' id='zoomFactor' class="input" type="number" bind:value={zoomFactor} step="0.1" min="1" max="2" />
         </div>
         <div>
-            <!-- <label for="preset">Preset</label>
-            <input type='number' bind:value={preset}/> -->
+            <!-- <Input type='number' bind:value={preset}/> -->
             <Button class="btn main-btn w-6">Preset</Button>
          </div>
     </div>
@@ -134,18 +186,37 @@
 </main>
 
 <style>
+    tr {
+        background-color: red;
+    }
     th, td {
-        padding: 8px;
-        text-align: left;
+        /* padding: 8px; */
+        text-align: center;
         border: 1px solid #ddd;
+        align-items: center;
+    }
+
+    th {
+        position: sticky;
+        top: 0;
+        background-color: #f2f2f2;
+    }
+    td {
+        background-color: #fff;
     }
 
     thead {
         background-color: #f2f2f2;
-        /* border: 1px solid #ffffff; */
     }
 
     div {
         margin-bottom: 20px;
     }
+
+    .table-wrapper {
+        overflow: auto;
+        min-height: 500px;
+        max-height: 500px; /* Set max height for scroll */
+    }
+    
 </style>

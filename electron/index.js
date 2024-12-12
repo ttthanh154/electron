@@ -41,12 +41,12 @@ app.whenReady().then(main)
 /**
  * Handling IPCs
  */
-ipcMain.handle('getFileTxt', async (event, data) => {
+ipcMain.handle('getVideoDirectory', async (event, data) => {
   console.log('event1', event)
   console.log('data1', data)
   const result = await dialog.showOpenDialog({
-    properties: ['openFile'],
-    title: 'Select Text File',
+    properties: ['openDirectory'],
+    title: 'Select Folder',
   })
 
   if (!result.canceled && result.filePaths.length > 0) {
@@ -64,8 +64,16 @@ ipcMain.handle('writeToFile', async (event, data) => {
   const fileBatPath = join(desktopDir, 'script.bat')
 
   try {
-    if (fileTxtPath) {
-      console.log('exisiting fileBatPath')
+    if (fs.existsSync(fileBatPath)) {
+      console.log('File already exists. Creating a new file with a different name.');
+      // Append timestamp to the new file name
+      const timestamp = Date.now();
+      const newFilePath = join(desktopDir, `script_${timestamp}.bat`);
+      
+      fs.writeFileSync(newFilePath, data);
+      
+      console.log('Data successfully written to new file:', newFilePath);
+      return 'New file successfully written.';
     }
     fs.writeFileSync(fileBatPath, data)
     console.log('Data successfully written to file:')

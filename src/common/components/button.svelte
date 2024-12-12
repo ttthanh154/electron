@@ -5,14 +5,13 @@
     }
 </script>
 
-<main>
-    <button on:click
+<button 
+    on:click
     on:mouseenter
     on:mouseleave
     {...buttonProps}>
     <slot/>
-    </button>
-</main>
+</button>
 
 <style>
 </style>

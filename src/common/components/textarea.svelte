@@ -11,7 +11,7 @@
 </script>
 
 <main>
-    <textarea class="textarea" placeholder={placeholder} rows={rows} cols={cols} bind:value on:input={handleChange}></textarea>
+    <textarea placeholder={placeholder} rows={rows} cols={cols} bind:value on:input={handleChange}></textarea>
 </main>
 
 <style>

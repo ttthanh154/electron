@@ -23,20 +23,12 @@
         <input class='input-default' id={id} type="file">
     </div>
     {:else}
+        <label for={id}>{label}</label>
         <input class='input' type={type} { ...inputProps } value={value} step={step} min={min} max={max} on:input={handleChange} />
     {/if}
 
 <style>
-     /* .grid {
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        gap: 1.5rem;
-    } */
-
     .input-default {
     	border: 1px solid transparent; /* Set border to transparent initially */
-        /* border: 1px solid var(--border); */
     }
-
 </style>

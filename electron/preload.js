@@ -2,8 +2,7 @@ const { ipcRenderer, contextBridge } = require("electron");
 
 const WINDOW_API = {
   getVideoDirectory: () => ipcRenderer.invoke("getVideoDirectory"),
-  writeToFile: (data) => ipcRenderer.invoke('writeToFile', data),
-  runScript: (data) => ipcRenderer.invoke('runScript', data),
+  runFfmpeg: (data) => ipcRenderer.invoke('runFfmpeg', data),
 };
 
 // window.api

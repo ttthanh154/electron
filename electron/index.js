@@ -1,14 +1,11 @@
 import { app, BrowserWindow, ipcMain, dialog } from 'electron'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
-import * as fs from 'fs'
-
-import os from 'os'
-import { exec } from 'child_process'
-import { stderr, stdout } from 'process'
+import ffmpegPath from '@ffmpeg-installer/ffmpeg';
+import ffmpeg from 'fluent-ffmpeg';
+ffmpeg.setFfmpegPath(ffmpegPath.path);
 
 const isDev = !app.isPackaged
-
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
@@ -34,6 +31,8 @@ function main() {
   window.loadFile(join(__dirname, '../public/index.html'))
   window.on('ready-to-show', window.show)
 
+  console.log('hello:::', ffmpeg );
+
   if (isDev) window.webContents.openDevTools()
 }
 app.whenReady().then(main)
@@ -42,8 +41,6 @@ app.whenReady().then(main)
  * Handling IPCs
  */
 ipcMain.handle('getVideoDirectory', async (event, data) => {
-  console.log('event1', event)
-  console.log('data1', data)
   const result = await dialog.showOpenDialog({
     properties: ['openDirectory'],
     title: 'Select Folder',
@@ -59,60 +56,44 @@ ipcMain.handle('getVideoDirectory', async (event, data) => {
   }
 })
 
-ipcMain.handle('writeToFile', async (event, data) => {
-  const desktopDir = join(os.homedir(), 'Desktop')
-  const fileBatPath = join(desktopDir, 'script.bat')
-
+ipcMain.handle('runFfmpeg', async (event, { outputWidth, outputHeight, speedFactor, zoomFactor, preset, inputFiles, outputFile, concatValue, libx264Profile, videoBitrate, maxBitrate, bufsize }) => {
   try {
-    if (fs.existsSync(fileBatPath)) {
-      console.log('File already exists. Creating a new file with a different name.');
-      // Append timestamp to the new file name
-      const timestamp = Date.now();
-      const newFilePath = join(desktopDir, `script_${timestamp}.bat`);
-      
-      fs.writeFileSync(newFilePath, data);
-      
-      console.log('Data successfully written to new file:', newFilePath);
-      return 'New file successfully written.';
+    const ffmpegCommand = ffmpeg({ preset: preset });
+
+    inputFiles.forEach((file) => {
+      ffmpegCommand.input(file);
+    });
+
+    let filterChain = '';
+    for (let i = 0; i < inputFiles.length; i++) {
+      filterChain += `[${i}:v][${i}:a]`;
     }
-    fs.writeFileSync(fileBatPath, data)
-    console.log('Data successfully written to file:')
-    return 'File successfully written.'
-  } catch (error) {
-    throw new Error('Failed to write to file.')
-  }
-})
+    filterChain += `concat=n=${concatValue}:v=1:a=1[v][a];`;
 
-ipcMain.handle('runScript', async (event, data) => {
-  const desktopDir = join(os.homedir(), 'Desktop')
-  const changeDirectoryCmd = `cd "${desktopDir}"` // Command to change directory to Desktop
-  const runScriptCmd = `cmd /c ${data}` // Command to run script.bat
+    filterChain += `[v]scale=w=iw*${zoomFactor}:h=ih*${zoomFactor},crop=w=${outputWidth}:h=${outputHeight}:x=(iw-${outputWidth})/2:y=(ih-${outputHeight})/2,setpts=PTS/${speedFactor};`;
+    filterChain += `[a]atempo=${speedFactor}[aout];[aout]aresample=async=1`;
 
-  exec(
-    changeDirectoryCmd,
-    { stdio: ['pipe', 'pipe', 'ignore'] },
-    (error, stdout, stderr) => {
-      console.log('runScriptCmd:::', runScriptCmd)
-      if (error) {
-        console.error(`Error changing directory: ${error.message}`)
-        return
-      }
-
-      console.log(`Changed directory to Desktop: ${stdout}`)
-
-      exec(runScriptCmd, (error, stdout, stderr) => {
-        if (error) {
-          console.log(`Error executing script in cmd: ${error.message}`)
-          return
-        }
-
-        if (stderr) {
-          console.log(`Script execution encountered an error: ${stderr}`)
-          return
-        }
-
-        console.log(`Script executed successfully: ${stdout}`)
+    ffmpegCommand.complexFilter(filterChain)
+      .videoCodec('libx264')
+      .audioCodec('aac')
+      .outputOptions([
+        '-profile:v ' + libx264Profile,
+        '-b:v ' + videoBitrate,
+        '-maxrate ' + maxBitrate,
+        '-bufsize ' + bufsize,
+        '-c:a aac',
+        '-b:a 192k'
+      ])
+      .output(outputFile)
+      .on('end', function() {
+        event.sender.send('ffmpegProcessCompleted', outputFile); // Send message to the renderer process
       })
-    },
-  )
-})
+      .on('error', function(err) {
+        event.sender.send('ffmpegProcessError', err.message); // Send error message to the renderer process
+      })
+      .run();
+      return ffmpegPath;
+  } catch (error) {
+    event.sender.send('ffmpegProcessError', error.message); // Send error message to the renderer process
+  }
+});

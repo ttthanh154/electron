@@ -6,11 +6,6 @@ export const getVideoDirectory = async () => {
 };
 
 //txtScript: string
-export const writeToFile = async (txtScript) => {
-  return await api.writeToFile(txtScript);
-};
-
-//txtScript: string
-export const runScript = async (txtScript) => {
-  return await api.runScript(txtScript);
+export const runFfmpeg = async ({outputWidth, outputHeight, speedFactor, zoomFactor, preset, inputFiles, outputFile, concatValue, libx264Profile, videoBitrate, maxBitrate, bufsize }) => {
+  return await api.runFfmpeg({ outputWidth, outputHeight, speedFactor, zoomFactor, preset, inputFiles, outputFile, concatValue, libx264Profile, videoBitrate, maxBitrate, bufsize });
 };

@@ -3,7 +3,7 @@ import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 import ffmpegPath from '@ffmpeg-installer/ffmpeg';
 import ffmpeg from 'fluent-ffmpeg';
-ffmpeg.setFfmpegPath(ffmpegPath.path);
+ffmpeg.setFfmpegPath(ffmpegPath.path.replace('app.asar', 'app.asar.unpacked'));
 import si from "systeminformation";
 
 
@@ -63,8 +63,6 @@ function main() {
   })
   window.loadFile(join(__dirname, '../public/index.html'))
   window.on('ready-to-show', window.show)
-
-  console.log('hello:::', ffmpeg );
 
   if (isDev) window.webContents.openDevTools()
 }

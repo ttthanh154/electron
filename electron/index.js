@@ -4,12 +4,45 @@ import { dirname, join } from 'path'
 import ffmpegPath from '@ffmpeg-installer/ffmpeg';
 import ffmpeg from 'fluent-ffmpeg';
 ffmpeg.setFfmpegPath(ffmpegPath.path);
+import si from "systeminformation";
+
 
 const isDev = !app.isPackaged
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
 let fileTxtPath
+let gpuInfo = await detectGPU();
+
+/**
+ * Enums
+ */
+const GPU_VENDOR = {
+  NVIDIA: 'NVIDIA',
+  AMD: 'AMD',
+}
+
+const VIDEO_CODEC = {
+  [GPU_VENDOR.NVIDIA]: 'h264_nvenc',
+  [GPU_VENDOR.AMD]: 'h264_amf',
+  libx264: 'libx264',
+};
+
+/**
+ * 
+ * Helpers
+ */
+
+async function detectGPU() {
+  try {
+    const gpuInfo = await si.graphics();
+    const gpuTier = gpuInfo.controllers[0].model;
+    return gpuTier;
+  } catch (error) {
+    console.error("Error detecting GPU:", error);
+    return null;
+  }
+}
 
 /**
  * App init
@@ -39,6 +72,7 @@ app.whenReady().then(main)
 
 /**
  * Handling IPCs
+ * Must be at the bottom of the file.
  */
 ipcMain.handle('getVideoDirectory', async (event, data) => {
   const result = await dialog.showOpenDialog({
@@ -56,7 +90,7 @@ ipcMain.handle('getVideoDirectory', async (event, data) => {
   }
 })
 
-ipcMain.handle('runFfmpeg', async (event, { outputWidth, outputHeight, speedFactor, zoomFactor, preset, inputFiles, outputFile, concatValue, libx264Profile, videoBitrate, maxBitrate, bufsize }) => {
+ipcMain.handle('render', async (event, { outputWidth, outputHeight, speedFactor, zoomFactor, preset, inputFiles, outputFile, concatValue, profile, videoBitrate, maxBitrate, bufsize }) => {
   try {
     const ffmpegCommand = ffmpeg({ preset: preset });
 
@@ -73,11 +107,26 @@ ipcMain.handle('runFfmpeg', async (event, { outputWidth, outputHeight, speedFact
     filterChain += `[v]scale=w=iw*${zoomFactor}:h=ih*${zoomFactor},crop=w=${outputWidth}:h=${outputHeight}:x=(iw-${outputWidth})/2:y=(ih-${outputHeight})/2,setpts=PTS/${speedFactor};`;
     filterChain += `[a]atempo=${speedFactor}[aout];[aout]aresample=async=1`;
 
+  
+    let videoCodec;
+    switch (true) {
+      case gpuInfo.includes(GPU_VENDOR.NVIDIA):
+        videoCodec = VIDEO_CODEC[GPU_VENDOR.NVIDIA];
+        break;
+      case gpuInfo.includes(GPU_VENDOR.AMD):
+        videoCodec = VIDEO_CODEC[GPU_VENDOR.AMD];
+        break;
+      default:
+        videoCodec = VIDEO_CODEC.libx264;
+    }
+
+    console.log('videoCodec', videoCodec);
+
     ffmpegCommand.complexFilter(filterChain)
-      .videoCodec('libx264')
+      .videoCodec(videoCodec)
       .audioCodec('aac')
       .outputOptions([
-        '-profile:v ' + libx264Profile,
+        '-profile:v ' + profile,
         '-b:v ' + videoBitrate,
         '-maxrate ' + maxBitrate,
         '-bufsize ' + bufsize,

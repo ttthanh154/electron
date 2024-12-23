@@ -26,6 +26,7 @@
     "@ffmpeg-installer/ffmpeg": "^1.1.0",
     "fluent-ffmpeg": "^2.1.3",
     "sirv-cli": "^2.0.0",
+    "systeminformation": "^5.23.16",
     "winreg": "^1.2.5"
   }
 }

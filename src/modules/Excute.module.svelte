@@ -1,13 +1,15 @@
 <script>
     import Button from '../common/components/button.svelte';
-    import { getVideoDirectory, runFfmpeg } from '../services/command.service.js';
+    import { getVideoDirectory, render } from '../services/command.service.js';
     import Input from "../common/components/input.svelte";
     import Textarea from "../common/components/textarea.svelte";
     import { DirectoryEnum } from '../enums/DirectoryEnum.svelte';
+    import {FfmpegModel} from '../models/ffmpeg.model';
 
     let videoDirectory;
     let speedFactor = 1;
     let zoomFactor = 1;
+    let videoBitrate = 15;
     let outputWidth = 1920;
     let outputHeight = 1080;
     let preset = 'fast';
@@ -18,9 +20,7 @@
     const handleRunFfmpeg = async () => {
         // Pass the required parameters for video processing to runFfmpeg function
         for (const script of dataSource) {
-            console.log('script:::', script.episodes);
             const episodeFiles = gatherEpisodes(script.episodes);
-            console.log('script.episodes:::', episodeFiles);
 
             videoDirectory = script.input;
             outputDirectory = script.output;
@@ -29,7 +29,7 @@
 
             console.log('videoFiles:::', inputFiles);
             if (videoDirectory !== undefined && outputDirectory !== undefined) {
-                const result = await runFfmpeg({
+                const ffmpeg = new FfmpegModel({
                     outputWidth: outputWidth,
                     outputHeight: outputHeight,
                     speedFactor: speedFactor,
@@ -38,15 +38,13 @@
                     inputFiles: inputFiles,
                     outputFile: `${outputDirectory}\\${episodeFiles[0]}`,
                     concatValue: concatValue,
-                    libx264Preset: 'fast', // Assuming 'medium' preset
-                    libx264Profile: 'main', // Assuming 'main' profile
-                    videoBitrate: '15M', // Assuming bitrate
+                    profile: 'main', // Assuming 'main' profile
+                    videoBitrate: `${videoBitrate}M`, // Assuming bitrate
                     maxBitrate: '15M', // Assuming max bitrate
                     bufsize: '20M' // Assuming buffer size
                 });
 
-                console.log('is rendering:::');
-                console.log('result:::', result)
+                const result = await render(ffmpeg);
             }
         }
     };
@@ -137,6 +135,9 @@
             <Input label='Zoom-in' id='zoomFactor' type="number" bind:value={zoomFactor} step="0.1" min="1" max="2" />
         </div>
         <div>
+            <Input label='Birate' id='birate' type="number" bind:value={videoBitrate} step="1" min="1" max="200" />
+        </div>
+        <div>
             <!-- <Input type='number' bind:value={preset}/> -->
             <Button >Preset</Button>
          </div>
@@ -178,7 +179,7 @@
     .table-wrapper {
         overflow: auto;
         min-height: 500px;
-        max-height: 500px; /* Set max height for scroll */
+        max-height: 550px; /* Set max height for scroll */
     }
     
 </style>

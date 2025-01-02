@@ -7,9 +7,10 @@
     export let max; // number
     export let label; // string
     export let id; // string
+    export let placeholder = '...';
+    export let onClick;
 
-
-    const handleChange = (event) => {
+    const handleChangeNumberInput = (event) => {
         let newValue = parseFloat(event.target.value);
     
         if (isNaN(newValue)) {
@@ -22,6 +23,10 @@
             value = newValue;
         }
     };
+
+    const handleChangeTextInput = (event) => {
+        value = event.target.value;
+    }
 
     const increment = () => {
         let floatNumber = Math.min(max, parseFloat(value) + parseFloat(step)).toFixed(1);
@@ -48,7 +53,7 @@
     <div class="number-container">
         <label class='input-label' for={id}>{label}</label>
         <div class="custom-number-input">
-            <input class='number-input' id={id} type="number" bind:value={value} on:input={handleChange} step={step} min={min} max={max}>
+            <input class='number-input' id={id} type="number" bind:value={value} on:input={handleChangeNumberInput} step={step} min={min} max={max}>
             <div class='input-arrow'>
                 <button on:click={increment}><i class="fa-solid fa-arrow-up"></i></button>
                 <button on:click={decrement}><i class="fa-solid fa-arrow-down"></i></button>
@@ -56,12 +61,19 @@
         </div>
     </div>
 {:else if type === 'file-text'}
-    <input class='file-text-input' type='text' value={value} disabled placeholder="Choose a file..." on:input={handleChange}>
+    <input class='file-text-input' type='text' value={value} readonly placeholder="Choose a file..." on:click={onClick}>
 {:else}
-    <input class='input' type={type} value={value} on:input={handleChange}>
+    <input class='default-input' type={type} value={value} placeholder={placeholder} on:input={handleChangeTextInput}>
 {/if}
 
 <style>
+    .default-input {
+        padding: 0.5em; 
+        font-size: 1em; 
+        border-radius: 5px;
+        resize: none;
+    }
+
     .number-container {
         display: flex;
         justify-content: center;
@@ -82,6 +94,11 @@
         color: white;
         outline: none;
         border: none;
+    }
+
+    input[type=text]::placeholder {
+        font-size: medium;
+        opacity: 0.8;        
     }
 
     ::placeholder {

@@ -10,9 +10,7 @@
     };
 </script>
 
-<main>
-    <textarea placeholder={placeholder} rows={rows} cols={cols} bind:value on:input={handleChange}></textarea>
-</main>
+<textarea placeholder={placeholder} rows={rows} cols={cols} bind:value on:input={handleChange}></textarea>
 
 <style>
     textarea {

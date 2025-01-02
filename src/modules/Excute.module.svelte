@@ -1,4 +1,5 @@
 <script>
+    import { success, warning, failure } from '../common/components/toast.component'
     import Input from "../common/components/input.svelte";
     import Textarea from "../common/components/textarea.svelte";
     import Select from '../common/components/select.svelte';
@@ -22,22 +23,36 @@
     let outputDirectory;
     let inputFiles;
     let concatValue;
+    let existingVideos = []; 
 
     const handleRunFfmpeg = async () => {
         dispatch(DispatchEventEnum.IS_LOADING, DispatchEnum.TURN_ON);
         
-        const renderPromises = []; // Array to hold the promises for concurrent rendering
+        const renderPromises = [];
+        let overallSuccess = true;
 
         for (let i = 0; i < dataSource.length; i++) {
             const script = dataSource[i];
+
+            if (!script.input || !script.output || !script.episodes) {
+                warning(`Thông tin các cột của dòng ${i + 1} còn trống. Vui lòng kiểm tra lại!`);
+                dispatch(DispatchEventEnum.IS_LOADING, DispatchEnum.TURN_OFF);
+                return;
+            }
+
             const episodeFiles = gatherEpisodes(script.episodes);
 
             videoDirectory = script.input;
-            outputDirectory = script.output;
+            outputDirectory = createOutputDirectory(script.prefix, script.output);
             concatValue = episodeFiles.length;
-            inputFiles = generateInputFilesString(videoDirectory, episodeFiles);
+            inputFiles = generateInputFilesString(videoDirectory, episodeFiles, existingVideos, i + 1);
 
-            if (videoDirectory !== undefined && outputDirectory !== undefined) {
+            if (inputFiles.length === 0) {
+                overallSuccess = false;
+                break;
+            };
+
+            if (videoDirectory !== undefined && outputDirectory !== undefined && inputFiles.length > 0) {
                 const ffmpeg = new FfmpegModel({
                     outputWidth: outputWidth,
                     outputHeight: outputHeight,
@@ -53,22 +68,66 @@
                     bufsize: '20M'
                 });
 
-                // Create a promise for each render and push it to the array
-                const renderPromise = render(ffmpeg).then(response => {
+                const renderPromise = render(ffmpeg)
+                .then(response => {
                     if (!response.status) {
-                        console.error(`Error in processing at index ${i}:`, response.data.error);
+                        overallSuccess = false;
+                        failure(response.message);
                     }
-                });
+                }).catch(error => {
+                    overallSuccess = false;
+                })
 
-                renderPromises.push(renderPromise); // Add the promise to the array
+                renderPromises.push(renderPromise); 
             }
         }
 
-        // Wait for all render promises to complete
-        await Promise.all(renderPromises);
+        if (overallSuccess) {
+            await Promise.all(renderPromises);
+        }
+       
+
+        if (overallSuccess) {
+            success('Hoàn tất quá trình render!');
+            reset();
+        } else {
+        }
 
         dispatch(DispatchEventEnum.IS_LOADING, DispatchEnum.TURN_OFF);
     };
+
+    /**
+     * 
+     * @param prefix string
+     * @param output string
+     */
+    function createOutputDirectory(prefix, output) {
+        // Extract the directory path and the file name
+        const lastBackslashIndex = output.lastIndexOf('\\');
+        
+        let directoryPath;
+        let fileNameWithPrefix;
+
+        // Check if the last backslash exists
+        if (lastBackslashIndex !== -1) {
+            directoryPath = output.substring(0, lastBackslashIndex); // Get directory path
+            const fileName = output.substring(lastBackslashIndex + 1); // Get file name
+            
+            // Prepend the prefix to the file name
+            if (prefix) {
+                fileNameWithPrefix = `${prefix}${fileName}`; // HD_VIDEO_1.mp4
+            } else {
+                fileNameWithPrefix = fileName; // Just the file name if no prefix
+            }
+        } else {
+            // Handle case where no backslash is found (invalid path)
+            return null;
+        }
+
+        // Construct the final output directory
+        const outputDirectory = `${directoryPath}\\${fileNameWithPrefix}`;
+        return outputDirectory;
+    }
 
     /**
      * 
@@ -76,8 +135,9 @@
      * @param index number
      */
     let handleGetVideoDirectory = async (typeDirectory, index)  => {
-        const data  = await getVideoDirectory();
-        typeDirectory === DirectoryEnum.INPUT ? dataSource[index].input = data : dataSource[index].output = data;
+        const { fileTxtPath, files}  = await getVideoDirectory();
+        existingVideos = [...files];
+        typeDirectory === DirectoryEnum.INPUT ? dataSource[index].input = fileTxtPath : dataSource[index].output = fileTxtPath;
     };
 
     /**
@@ -92,36 +152,53 @@
 
     /**
      * 
+     * @param videoDirectory string[]
      * @param videos string[]
+     * @param existingVideos string[]
      */
-    const generateInputFilesString = (videoDirectory, videos) => {
-        const inputFiles = videos.map(video => `${videoDirectory}\\${video}`);
-        return inputFiles;
+     const generateInputFilesString = (videoDirectory, videos, existingVideos, row) => {
+        // Convert existingVideos to a Set for faster lookups
+        const existingVideosSet = new Set(existingVideos);
+
+        // Check for missing videos
+        const missingVideos = videos.filter(video => !existingVideosSet.has(video));
+        if (missingVideos.length > 0) {
+            warning(`Dòng ${row} chứa các video không tồn tại: ${missingVideos.join(', ')}`);
+            return [];
+        } {
+            // Generate input file paths
+            const inputFiles = videos.map(video => `${videoDirectory}\\${video}`);
+            return inputFiles;
+        }
     };
-    
+
     /**
      * 
-     * @param data string[]
+     * @param prefix string
+     * @param episode string
      */
-    const gatherEpisodes = (episode) => {
-        // Regular expression to match file name patterns (assuming file names are alphanumeric with underscores)
-        const fileNameRegex = /\b\w+(?:_\w+)*\b/g;
-            
-        const fileNames = episode.match(fileNameRegex);        
-        // Add '.mp4' to each filename
-        const fileNamesWithExtension = fileNames.map(fileName => fileName + '.mp4');
-            
-        return fileNamesWithExtension || [];
-    }
+     const gatherEpisodes = (episode) => {
+        // Regular expression to match file name patterns (alphanumeric with underscores, excluding Vietnamese characters)
+        const fileNameRegex = /\b[a-zA-Z0-9_]+\b/g;
 
+        const fileNames = episode.match(fileNameRegex);
+        
+        // Add '.mp4' to each filename, ensuring we don't return undefined
+        const fileNamesWithExtension = fileNames ? fileNames.map(fileName => fileName + '.mp4') : [];
+        
+        return fileNamesWithExtension;
+    };
+
+    
     let dataSource = [{
         input: '',
         output: '',
+        prefix: '',
         episodes: ''
     }];
 
     const addRow = () => {
-        dataSource = [...dataSource, { input: '', output: '', episodes: '' }]; // Add a new row with default values
+        dataSource = [...dataSource, { input: '', output: '', prefix: '', episodes: '' }]; // Add a new row with default values
     }
 
     /**
@@ -138,13 +215,19 @@
     }
     
     const reset = () => {
-        dataSource = [{ input: '', output: '', episodes: '' }];
+        dataSource = [{ input: '', output: '', prefix: '', episodes: '' }];
         speedFactor = 1;
         zoomFactor = 1;
         videoBitrate = 15
         preset = 'medium'
     }
     
+    const countVideos = (episodes) => {
+        if (!episodes) return 0; 
+        
+        const videoArray = episodes.split(',').map(video => video.trim()).filter(Boolean);
+        return videoArray.length;
+    };
 </script>
 
 <main>
@@ -162,6 +245,7 @@
                     <th scope="col">Input location</th>
                     <th scope="col">Output location</th>
                     <th scope="col">Imported videos</th>
+                    <th scope="col">Quantity</th>
                     <th scope="col">Action</th>
                 </tr>
             </thead>
@@ -174,7 +258,10 @@
                                 <button on:click={() => handleGetVideoDirectory(DirectoryEnum.INPUT, i)}>
                                     <i class="fa-solid fa-download fa-2xl" style="color: #FFFFFF;"></i>
                                 </button>
-                                <Input type='file-text' id={'input-' + 1} bind:value={item.input}/>
+                                <Input 
+                                    onClick={() => handleGetVideoDirectory(DirectoryEnum.INPUT, i)}
+                                    type='file-text' id={'input' + 1} bind:value={item.input}
+                                />
                             </span>
                         </td>
                         <td align="center">
@@ -182,15 +269,22 @@
                                 <button on:click={() => handleGetPackageAsDirectory(DirectoryEnum.OUTPUT, i)}>
                                     <i class="fa-solid fa-download fa-2xl" style="color: #FFFFFF;"></i>
                                 </button>
-                                <Input type='file-text' id={'output' + 1} bind:value={item.output}/>
+                                <Input 
+                                    onClick={() => handleGetPackageAsDirectory(DirectoryEnum.OUTPUT, i)}
+                                    type='file-text' id={'output' + 1} bind:value={item.output}
+                                />
                             </span>
-                        </td>
-                        <td>
-                            <Textarea placeholder='Import videos...' 
+                        </td>   
+                        <td align="center">
+                            <div class='imported-videos'>
+                                <Input type='text' id={'prefix' + 1} bind:value={item.prefix} placeholder='Cú pháp tên video'/>
+                                <Textarea placeholder='Import videos...' 
                                 rows='1' 
-                                cols='50' 
+                                cols='35' 
                                 bind:value={item.episodes} />
+                            </div>
                         </td>
+                        <td align="center" >{countVideos(item.episodes)}</td>
                         <td>
                             <span class='trash-icon' >
                                 <button on:click={() => deleteRow(i)}>
@@ -213,7 +307,7 @@
         </div>
         <div>
             
-            <Input label='Birate' id='birate' type="number" bind:value={videoBitrate} step="1" min="1" max="200" maxLength="3"/>
+            <Input label='Bitrate' id='bitrate' type="number" bind:value={videoBitrate} step="1" min="1" max="200" maxLength="3"/>
         </div>
         <div>
             <Select text='Tốc độ render (Tốc độ càng nhanh chất lượng càng giảm)' position='top' class="select" label='Preset' id={preset}>
@@ -398,5 +492,10 @@
     }
     .trash-icon :active {
         opacity: 0.8;
+    }
+
+    .imported-videos {
+        display: flex;
+        gap: 0.5em;
     }
 </style>

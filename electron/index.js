@@ -5,7 +5,8 @@ import ffmpegPath from "@ffmpeg-installer/ffmpeg";
 import ffmpeg from "fluent-ffmpeg";
 ffmpeg.setFfmpegPath(ffmpegPath.path.replace("app.asar", "app.asar.unpacked"));
 import si from "systeminformation";
-
+import fs from 'fs';
+import path from 'path';
 // const isDev = !app.isPackaged;
 const isDev = app.isPackaged;
 const __filename = fileURLToPath(import.meta.url);
@@ -32,21 +33,22 @@ const VIDEO_CODEC = {
  * Response
  */
 class Response {
-  constructor(status, data = null) {
+  constructor(status, message, data ) {
     this.status = status;
+    this.message = message
     this.data = data;
   }
 }
 
 class SuccessResponse extends Response {
-  constructor(data) {
-      super(true, data); // Assuming 200 is the status code for success
+  constructor(message, data = null) {
+      super(true, message, data); // Assuming 200 is the status code for success
   }
 }
 
 class FailedResponse extends Response {
-  constructor(errorMessage) {
-      super(false, { error: errorMessage }); // Include an error message in the data
+  constructor(message, data = null) {
+      super(false, message, data); // Include an error message in the data
   }
 }
 
@@ -117,7 +119,13 @@ ipcMain.handle("getVideoDirectory", async (event, data) => {
 
   if (!result.canceled && result.filePaths.length > 0) {
     fileTxtPath = result.filePaths[0];
-    return fileTxtPath;
+
+    const files = fs.readdirSync(fileTxtPath).filter(file => {
+      // Check if the file is an .mp4 file
+      return path.extname(file).toLowerCase() === '.mp4';
+    }).map(file => file);
+
+    return { fileTxtPath, files };
   } else {
     // Handle case where user cancels file selection
     return null;
@@ -131,7 +139,7 @@ ipcMain.handle("getPackageAsDirectory", async (event, data) => {
   });
 
   if (!result.canceled && result.filePaths.length > 0) {
-    fileTxtPath = result.filePaths[0];
+    fileTxtPath = `${result.filePaths[0]}.mp4`;
     return fileTxtPath;
   } else {
     // Handle case where user cancels file selection
@@ -159,7 +167,7 @@ ipcMain.handle(
     }
   ) => {
     try {
-      const ffmpegCommand = ffmpeg({ preset: preset });
+      const ffmpegCommand = ffmpeg({ preset: preset }).outputFPS(60);
 
       inputFiles.forEach((file) => {
         ffmpegCommand.input(file);
@@ -186,7 +194,7 @@ ipcMain.handle(
       }
 
       // Return a Promise to manage FFmpeg execution
-      return new Promise((resolve, reject) => {
+      return new Promise((resolve) => {
         ffmpegCommand
           .complexFilter(filterChain)
           .videoCodec(videoCodec)
@@ -204,7 +212,7 @@ ipcMain.handle(
             resolve(new SuccessResponse('Render successfully')); // Resolve the promise
           })
           .on("error", function (err) {
-            reject(new FailedResponse(err.message)); // Reject the promise
+            resolve(new FailedResponse(err.message)); // Reject the promise
           })
           .run();
       });

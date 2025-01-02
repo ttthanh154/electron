@@ -1,10 +1,18 @@
 <script>
-	import "./app.css";
+    import Loader from '../src/common/components/loader.svelte';
 	import Execute from './modules/Excute.module.svelte';
+    import { DispatchEnum } from '../src/enums/DispatchEnum.svelte';
+
+	let isLoading = DispatchEnum.TURN_OFF;
+
+	const setIsLoading = (event) => {
+        isLoading = event.detail; // Get the value from the child
+    }
 </script>	
 
 <main>
-	<Execute></Execute>
+    <Loader isLoading={isLoading}/>
+	<Execute on:isLoading={setIsLoading}></Execute>
 </main>
 
 <style>

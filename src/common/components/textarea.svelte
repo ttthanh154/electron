@@ -15,5 +15,17 @@
 </main>
 
 <style>
-    
+    textarea {
+        padding: 0.5em; 
+        font-size: 1em; 
+        background-color: #CED9DB;
+        border: 1px solid #FFFFFF;
+        border-radius: 5px;
+        resize: none;
+    }
+
+    textarea:focus {
+        outline: none !important;
+        border: 1px solid #000000;
+    }
 </style>

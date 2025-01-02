@@ -4,6 +4,11 @@
   "private": true,
   "main": "./electron/index.js",
   "type": "module",
+  "author": {
+    "name": "Thanh Truong",
+    "email": "ttthanh154@gmail.com",
+    "url": "https://github.com/ttthanh154"
+  },
   "scripts": {
     "package": "npm run build && electron-builder",
     "build": "rollup -c",
@@ -24,6 +29,7 @@
   },
   "dependencies": {
     "@ffmpeg-installer/ffmpeg": "^1.1.0",
+    "@fortawesome/fontawesome-free": "^6.7.2",
     "fluent-ffmpeg": "^2.1.3",
     "sirv-cli": "^2.0.0",
     "systeminformation": "^5.23.16",

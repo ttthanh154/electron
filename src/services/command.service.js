@@ -1,11 +1,13 @@
 // command.service.svelte
 
-//txtScript: string
 export const getVideoDirectory = async () => {
   return await api.getVideoDirectory();
 };
 
-//txtScript: string
+export const getPackageAsDirectory = async () => {
+  return await api.getPackageAsDirectory();
+};
+
 export const render = async (data) => {
   return await api.render(data);
 };
